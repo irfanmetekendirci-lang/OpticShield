@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 4
+names: ['Handgun', 'Knife', 'Rifle', 'Sword']
+
+roboflow:
+  workspace: maheshchhetri
+  project: weapon-detection-e6otc
+  version: 4
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/maheshchhetri/weapon-detection-e6otc/dataset/4
