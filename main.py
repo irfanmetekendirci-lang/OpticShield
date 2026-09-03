@@ -1,6 +1,7 @@
 import cv2
 from ultralytics import YOLO
 from utils.alarm import SecurityAlarm
+import config
 
 # 1. Modeli yükle
 model = YOLO("models/best.pt")
@@ -18,6 +19,9 @@ pencere_adi = 'YOLO Canli Tespit'
 cv2.namedWindow(pencere_adi, cv2.WINDOW_NORMAL)
 cv2.resizeWindow(pencere_adi, 1280, 720)
 
+# Alarm sayacını oluşturalım:
+alarm_counter = 0
+
 while cap.isOpened():
     success, frame = cap.read()
 
@@ -31,36 +35,46 @@ while cap.isOpened():
     # YOLO ile tahmin yap (Direkt frame'i gönderiyoruz)
     result = model(frame, verbose=False)
 
-    # Başlangıçta o kare için tespiti False yapıyoruz
-    intruder_detected = False
+    # Her kare için tehdit kontrol bayraklarını sıfırlayalım
+    threat_found = False        # Tehdit Bulundu mu?
+    is_critical = False         # Tehdit Kritik mi?
 
-    # Tespit edilen tüm kareleri döndürüp tehlike varsa alarm çaldıracağız:
+    # Her kareyi döndürüp arama yapacağız ve tespit edeceğiz:
     for box in result[0].boxes:
         class_id = int(box.cls[0])              # Sınıf ID'sini al (örn: 0, 1, 2...)
         class_name = model.names[class_id]      # ID'yi isme çevir (örn: 'person')
+        conf = float(box.conf[0])               # O anki kutunun güveni
 
          # Tespit edilen isim aradığımız şeyse:
-        if class_name == "Handgun":
-            intruder_detected = True
-            break    # Bir tane bulmamız alarm için yeterli, döngüden çıkabiliriz
+        if class_name == "Handgun" or class_name == "Knife" or class_name == "Rifle" or class_name == "Sword":
+            if conf >= config.CRITICAL_CONF:
+                threat_found = True
+                is_critical = True
+                break  # En yüksek seviye zaten bulundu, diğer kutuları boşuna dönme
+            elif conf >= config.MIN_CONF:
+                threat_found = True
 
-        elif class_name == "Knife":
-            intruder_detected = True
-            break
-
-        elif class_name == "Rifle":
-            intruder_detected = True
-            break 
-
-        elif class_name == "Sword":
-            intruder_detected = True
-            break 
         
     # --- ALARM KOŞULU ---
-    if intruder_detected:
-        alarm.trigger()  # Ayrı dosyadaki alarmı çal
+    if is_critical:
+        alarm_counter = config.ALARM_THRESHOLD
+        alarm.trigger()
+
+    elif threat_found:
+        alarm_counter += 1
+        print(f"Tehdit şüphesi... Sayaç: {alarm_counter}/{config.ALARM_THRESHOLD}")
+
+        if alarm_counter >= config.ALARM_THRESHOLD:
+            alarm.trigger()
+
     else:
-        alarm.stop()     # Kimse yoksa alarmı sustur   
+        ''' 3. Tehdit yok: Sayacı yavaşça sıfıra doğru düşür (Decay)
+         Direkt 0 yaparsan model tek kare kaçırınca alarm anında susar, o yüzden 1 azaltırız:'''
+        if alarm_counter > 0:
+            alarm_counter -= 1
+        
+        if alarm_counter == 0:
+            alarm.stop()
         
     # Kutuları çizilmiş görseli al
     annotated_frame = result[0].plot()
